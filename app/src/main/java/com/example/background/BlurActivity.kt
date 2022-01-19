@@ -16,10 +16,14 @@
 
 package com.example.background
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Observer
+import androidx.work.WorkInfo
 import com.example.background.databinding.ActivityBlurBinding
 
 class BlurActivity : AppCompatActivity() {
@@ -36,9 +40,48 @@ class BlurActivity : AppCompatActivity() {
         binding = ActivityBlurBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        binding.goButton.setOnClickListener { viewModel.applyBlur(blurLevel) }
+        binding.goButton.setOnClickListener {
+            requestPermissionLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+
+             }
+        binding.seeFileButton.setOnClickListener{
+            viewModel.outputUri?.let {
+                val actionView = Intent(Intent.ACTION_VIEW,it)
+                actionView.resolveActivity(packageManager)?.run {
+                    startActivity(actionView)
+                }
+            }
+        }
+        viewModel.outputWorkInfos.observe(this,workInfoObserver())
     }
 
+    private fun workInfoObserver(): Observer<List<WorkInfo>> {
+        return Observer {  listOfWorkInfo ->
+            if (listOfWorkInfo.isNullOrEmpty()){
+                return@Observer
+            }
+            val workInfo = listOfWorkInfo[0]
+            if (workInfo.state.isFinished){
+                showWorkFinished()
+                val outputImageUri = workInfo.outputData.getString(KEY_IMAGE_URI)
+                if (!outputImageUri.isNullOrEmpty()){
+                    viewModel.setOutputUri(outputImageUri)
+                    binding.seeFileButton.visibility = View.VISIBLE
+                }
+            }else{
+                showWorkInProgress()
+            }
+        }
+    }
+
+    private val requestPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { isGranted: Boolean ->
+            if (isGranted) {
+                viewModel.applyBlur(blurLevel)
+            }
+        }
     /**
      * Shows and hides views for when the Activity is processing an image
      */
